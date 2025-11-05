@@ -6,11 +6,10 @@ import { Stack, useRouter, useSegments } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import { useEffect, useState } from 'react'
 import 'react-native-reanimated'
+import Toast from 'react-native-toast-message'
 import { supabase } from '../lib/supabase'
 
-export {
-  ErrorBoundary
-} from 'expo-router'
+export { ErrorBoundary } from 'expo-router'
 
 export const unstable_settings = {
   initialRouteName: 'dashboard',
@@ -34,9 +33,7 @@ export default function RootLayout() {
     }
   }, [loaded])
 
-  if (!loaded) {
-    return null
-  }
+  if (!loaded) return null
 
   return <RootLayoutNav />
 }
@@ -46,9 +43,9 @@ function RootLayoutNav() {
   const router = useRouter()
   const segments = useSegments()
   const [session, setSession] = useState<any>(null)
-  const [isReady, setIsReady] = useState(false) // ✅ nouveau flag
+  const [isReady, setIsReady] = useState(false)
 
-  // 🧙‍♂️ AuthGuard logic
+  // 🧠 Récupère la session Supabase
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase.auth.getSession()
@@ -67,15 +64,31 @@ function RootLayoutNav() {
     }
   }, [])
 
+  // 🚦 Contrôle de navigation
   useEffect(() => {
-    // ⛔️ Attendre que tout soit prêt avant de rediriger
     if (!isReady) return
 
     const inAuthGroup = (segments[0] as string) === 'auth'
+    // segments may be a tuple of length 1, so read index 1 safely and allow undefined
+    const currentSegment = (segments as string[])[1]
+
+    // ✅ Autorise explicitement /auth/update-password même si une session existe
+    const isUpdatePasswordPage = currentSegment === 'update-password'
+
+    // ✅ Autorise aussi si l’URL contient type=recovery (depuis email Supabase)
+    const isRecoveryFlow =
+      typeof window !== 'undefined' && window.location.href.includes('type=recovery')
 
     if (!session && !inAuthGroup) {
+      // Non connecté → redirige vers login
       router.replace('/auth/login')
-    } else if (session && inAuthGroup) {
+    } else if (
+      session &&
+      inAuthGroup &&
+      !isUpdatePasswordPage &&
+      !isRecoveryFlow
+    ) {
+      // Connecté → empêche d’aller sur /auth/... sauf pour update-password
       router.replace('/dashboard')
     }
   }, [isReady, session, segments])
@@ -87,6 +100,9 @@ function RootLayoutNav() {
         <Stack.Screen name="profile" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
+
+      {/* ✅ Composant global pour afficher les Toasts */}
+      <Toast />
     </ThemeProvider>
   )
 }

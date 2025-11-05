@@ -44,6 +44,12 @@ export default function Login() {
       <TouchableOpacity onPress={() => router.push('/auth/register')}>
         <Text style={styles.link}>Créer un compte</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => router.push("/auth/forgot-password")}>
+        <Text style={{ color: "#007AFF", textAlign: "center", marginTop: 16 }}>
+        Mot de passe oublié ?
+        </Text>
+      </TouchableOpacity>
     </View>
   )
 }
