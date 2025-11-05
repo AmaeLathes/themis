@@ -13,7 +13,7 @@ export {
 } from 'expo-router'
 
 export const unstable_settings = {
-  initialRouteName: '(tabs)',
+  initialRouteName: 'dashboard',
 }
 
 SplashScreen.preventAutoHideAsync()
@@ -83,7 +83,8 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="dashboard" options={{ headerShown: false }} />
+        <Stack.Screen name="profile" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>

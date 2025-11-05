@@ -1,10 +1,16 @@
+import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { supabase } from '../lib/supabase'
 
+
+
+
+
 export default function Profile() {
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
     getProfile()
@@ -20,6 +26,8 @@ export default function Profile() {
     if (error) Alert.alert('Erreur', error.message)
     else setProfile(data)
     setLoading(false)
+    console.log("Profil chargé:", data)
+
   }
 
   const updateProfile = async () => {
@@ -29,7 +37,7 @@ export default function Profile() {
         full_name: profile.full_name,
         language: profile.language,
       })
-      .eq('id', profile.id)
+      .eq('id', profile.id )
     if (error) Alert.alert('Erreur', error.message)
     else Alert.alert('Profil mis à jour ✅')
   }
@@ -39,6 +47,7 @@ export default function Profile() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Mon profil</Text>
+
       <TextInput
         style={styles.input}
         value={profile?.full_name}
@@ -55,8 +64,16 @@ export default function Profile() {
       <TouchableOpacity style={styles.button} onPress={updateProfile}>
         <Text style={styles.buttonText}>Sauvegarder</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => router.push('/settings/delete-account')}>
+        <Text style={{ color: 'red', marginTop: 20 }}>🗑️ Supprimer mon compte</Text>
+      </TouchableOpacity>
+
     </View>
+
   )
+
+
 }
 
 const styles = StyleSheet.create({

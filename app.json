@@ -13,6 +13,11 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "extra": {
+      // app.json is JSONC and cannot evaluate JS expressions like process.env.
+      // To inject environment variables at build time, convert to app.config.js instead.
+      "SECRET_WEBHOOK_KEY": "process.env.EXPO_PUBLIC_SECRET_WEBHOOK_KEY"
+    },
     "ios": {
       "supportsTablet": true
     },
