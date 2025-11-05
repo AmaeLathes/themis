@@ -22,8 +22,12 @@ export default function Dashboard() {
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <Text style={{ fontSize: 20, marginBottom: 10 }}>Bienvenue ⚖️</Text>
+      <Text style={{ fontSize: 20, marginBottom: 10 }}>Bienvenue sur ton tableau de bord ⚖️</Text>
       <Text style={{ color: '#666', marginBottom: 30 }}>{user?.email}</Text>
+
+      <TouchableOpacity onPress={() => router.push('/profile')}>
+        <Text style={{ color: '#1e90ff', marginTop: 20 }}>👤 Voir mon profil</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={{ backgroundColor: '#ff5555', padding: 12, borderRadius: 8 }}
