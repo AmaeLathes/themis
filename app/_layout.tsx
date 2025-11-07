@@ -7,7 +7,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import { useEffect, useState } from 'react'
 import 'react-native-reanimated'
 import Toast from 'react-native-toast-message'
-import { supabase } from '../lib/supabase'
+import { supabase } from './lib/supabase'
 
 export { ErrorBoundary } from 'expo-router'
 

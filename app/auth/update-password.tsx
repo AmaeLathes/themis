@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import type { TextStyle, ViewStyle } from 'react-native'
 import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import Toast from 'react-native-toast-message'
-import { supabase } from '../../lib/supabase'
+import { supabase } from '../lib/supabase'
 
 export default function UpdatePassword() {
   const router = useRouter()
