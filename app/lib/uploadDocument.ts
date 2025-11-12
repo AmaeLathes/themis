@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy'
+import Tesseract from 'tesseract.js'; // 🧠 OCR
 import { supabase } from './supabase'
 
 // ⚙️ Détection manuelle du type MIME
@@ -13,6 +14,19 @@ const getMimeType = (fileName: string) => {
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   }
   return mimeTypes[extension || ''] || 'application/octet-stream'
+}
+
+// 🧠 Fonction OCR (Tesseract)
+async function extractTextFromImage(uri: string): Promise<string> {
+  try {
+    console.log('🔍 Lecture OCR en cours...')
+    const { data } = await Tesseract.recognize(uri, 'fra') // langue française
+    console.log('✅ OCR terminé')
+    return data.text.trim()
+  } catch (err) {
+    console.error('⚠️ Erreur OCR:', err)
+    return ''
+  }
 }
 
 export async function uploadDocument(uri: string, userId: string, category: string, fileName?: string) {
@@ -39,7 +53,7 @@ export async function uploadDocument(uri: string, userId: string, category: stri
         ? Uint8Array.from(atob(fileData), (c) => c.charCodeAt(0))
         : new Uint8Array(fileData)
 
-    // 🔼 Upload vers le bucket Supabase Storage
+    // 🔼 Upload vers Supabase Storage
     const { data, error } = await supabase.storage
       .from('documents')
       .upload(`${userId}/${safeFileName}`, fileBytes, {
@@ -53,17 +67,29 @@ export async function uploadDocument(uri: string, userId: string, category: stri
       .from('documents')
       .getPublicUrl(data.path)
 
-    // 🧩 Insérer le document en base
+    const fileUrl = publicUrl.publicUrl
+
+    // 🧠 OCR automatique (images uniquement)
+    let ocrText = ''
+    if (fileType.startsWith('image/')) {
+      ocrText = await extractTextFromImage(uri)
+    }
+
+    // 🧩 Insertion en base
     const { error: insertError } = await supabase.from('documents').insert({
       user_id: userId,
       title: safeFileName,
       category,
-      file_url: publicUrl.publicUrl,
+      file_url: fileUrl,
+      ocr_text: ocrText || null, // 💾 Texte OCRisé
+      created_at: new Date().toISOString(),
+      statut: 'analysé',
     })
 
     if (insertError) throw insertError
 
-    return publicUrl.publicUrl
+    console.log('✅ Document enregistré avec OCR')
+    return fileUrl
   } catch (err: any) {
     console.error('❌ Erreur uploadDocument:', err.message)
     throw new Error(err.message)
