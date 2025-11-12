@@ -1,11 +1,9 @@
 import * as FileSystem from 'expo-file-system/legacy'
-import Tesseract from 'tesseract.js'; // 🧠 OCR
 import { supabase } from './supabase'
 
-// ⚙️ Détection manuelle du type MIME
 const getMimeType = (fileName: string) => {
-  const extension = fileName.split('.').pop()?.toLowerCase()
-  const mimeTypes: Record<string, string> = {
+  const ext = fileName.split('.').pop()?.toLowerCase()
+  const types: Record<string, string> = {
     pdf: 'application/pdf',
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
@@ -13,83 +11,70 @@ const getMimeType = (fileName: string) => {
     doc: 'application/msword',
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   }
-  return mimeTypes[extension || ''] || 'application/octet-stream'
+  return types[ext || ''] || 'application/octet-stream'
 }
 
-// 🧠 Fonction OCR (Tesseract)
-async function extractTextFromImage(uri: string): Promise<string> {
+export async function uploadDocument(
+  file: File | string,
+  userId: string,
+  category: string
+) {
   try {
-    console.log('🔍 Lecture OCR en cours...')
-    const { data } = await Tesseract.recognize(uri, 'fra') // langue française
-    console.log('✅ OCR terminé')
-    return data.text.trim()
-  } catch (err) {
-    console.error('⚠️ Erreur OCR:', err)
-    return ''
-  }
-}
+    let fileName: string
+    let fileType: string
+    let fileBytes: Uint8Array
 
-export async function uploadDocument(uri: string, userId: string, category: string, fileName?: string) {
-  try {
-    const safeFileName = fileName || `document_${Date.now()}`
-    const fileType = getMimeType(safeFileName)
+    // 🌐 Cas Web
+    if (typeof window !== 'undefined' && file instanceof File) {
+      fileName = file.name
+      fileType = file.type || getMimeType(file.name)
 
-    let fileData: ArrayBuffer | string
-
-    if (typeof window === 'undefined') {
-      // 🟢 Mobile (Expo)
-      fileData = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      })
-    } else {
-      // 💻 Web
-      const response = await fetch(uri)
-      const blob = await response.blob()
-      fileData = await blob.arrayBuffer()
+      // on lit directement les bytes du fichier
+      const buffer = await file.arrayBuffer()
+      fileBytes = new Uint8Array(buffer)
     }
 
-    const fileBytes =
-      typeof fileData === 'string'
-        ? Uint8Array.from(atob(fileData), (c) => c.charCodeAt(0))
-        : new Uint8Array(fileData)
+    // 📱 Cas Mobile (URI)
+    else if (typeof file === 'string') {
+      fileName = file.split('/').pop() || `document_${Date.now()}`
+      fileType = getMimeType(fileName)
+
+      const base64Data = await FileSystem.readAsStringAsync(file, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
+
+      fileBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0))
+    }
+
+    else {
+      throw new Error('Format de fichier non reconnu')
+    }
 
     // 🔼 Upload vers Supabase Storage
     const { data, error } = await supabase.storage
       .from('documents')
-      .upload(`${userId}/${safeFileName}`, fileBytes, {
+      .upload(`${userId}/${fileName}`, fileBytes, {
         contentType: fileType,
         upsert: true,
       })
 
     if (error) throw error
 
-    const { data: publicUrl } = supabase.storage
-      .from('documents')
-      .getPublicUrl(data.path)
+    const { data: publicUrl } = supabase.storage.from('documents').getPublicUrl(data.path)
 
-    const fileUrl = publicUrl.publicUrl
-
-    // 🧠 OCR automatique (images uniquement)
-    let ocrText = ''
-    if (fileType.startsWith('image/')) {
-      ocrText = await extractTextFromImage(uri)
-    }
-
-    // 🧩 Insertion en base
+    // 🧩 Enregistrement BDD
     const { error: insertError } = await supabase.from('documents').insert({
       user_id: userId,
-      title: safeFileName,
+      title: fileName,
       category,
-      file_url: fileUrl,
-      ocr_text: ocrText || null, // 💾 Texte OCRisé
-      created_at: new Date().toISOString(),
-      statut: 'analysé',
+      file_url: publicUrl.publicUrl,
+      mime_type: fileType,
     })
 
     if (insertError) throw insertError
 
-    console.log('✅ Document enregistré avec OCR')
-    return fileUrl
+    console.log('✅ Document enregistré :', fileName)
+    return publicUrl.publicUrl
   } catch (err: any) {
     console.error('❌ Erreur uploadDocument:', err.message)
     throw new Error(err.message)
