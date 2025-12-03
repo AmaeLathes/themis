@@ -1,7 +1,9 @@
 import * as DocumentPicker from 'expo-document-picker'
+import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { Button, FlatList, Image, StyleSheet, Text, View } from 'react-native'
 import DropZone from '../components/DropZone'
+import { extractTextFromFile } from './lib/ocrReader'; // ✅ OCR universel (PDF + image)
 import { supabase } from './lib/supabase'
 import { uploadDocument } from './lib/uploadDocument'
 
@@ -11,13 +13,15 @@ interface FileStatus {
   preview?: string
   progress: number
   status: 'pending' | 'uploading' | 'done' | 'error'
-  file?: File // ✅ Optionnel, utile pour le web
+  file?: File
 }
 
 export default function UploadScreen() {
   const [files, setFiles] = useState<FileStatus[]>([])
   const [userId, setUserId] = useState<string | null>(null)
+  const router = useRouter()
 
+  // 🔑 Récupération de l'utilisateur connecté Supabase
   useEffect(() => {
     const fetchUser = async () => {
       const { data } = await supabase.auth.getUser()
@@ -26,29 +30,58 @@ export default function UploadScreen() {
     fetchUser()
   }, [])
 
-  // 📤 Upload unique
+  // 📤 Upload + OCR intégré
   const uploadFile = async (file: FileStatus, index: number) => {
     try {
-      setFiles((prev) =>
+      // MAJ visuelle : envoi en cours
+      setFiles(prev =>
         prev.map((f, i) =>
           i === index ? { ...f, status: 'uploading', progress: 40 } : f
         )
       )
 
+      // 1️⃣ Upload fichier vers Supabase Storage
       const result = await uploadDocument(file.file || file.uri, userId!, 'auto')
+      if (!result) throw new Error('Erreur upload vers Supabase Storage')
 
-      if (result) {
-        setFiles((prev) =>
-          prev.map((f, i) =>
-            i === index ? { ...f, progress: 100, status: 'done' } : f
-          )
-        )
+      // 2️⃣ OCR : lecture automatique du contenu du fichier
+      console.log('🔍 Lecture OCR du fichier en cours...')
+      const text = await extractTextFromFile(file.uri, file.file?.type)
+
+      if (text) {
+        console.log('📜 Texte OCR détecté (aperçu) :')
+        console.log(text.substring(0, 400))
       } else {
-        throw new Error('Erreur upload')
+        console.log('⚠️ Aucun texte détecté (fichier vide ou non lisible)')
       }
+
+      // 3️⃣ Insertion du document + OCR dans la table "documents"
+      if (userId) {
+        const { error } = await supabase.from('documents').insert([
+          {
+            user_id: userId,
+            file_name: file.name,
+            ocr_text: text || null, // 🧠 colonne réelle de ta BDD
+            created_at: new Date().toISOString(),
+          },
+        ])
+
+        if (error) {
+          console.error('⚠️ Erreur insertion Supabase :', error.message)
+        } else {
+          console.log('✅ Document ajouté à la table "documents" avec texte OCR')
+        }
+      }
+
+      // 4️⃣ MAJ visuelle
+      setFiles(prev =>
+        prev.map((f, i) =>
+          i === index ? { ...f, progress: 100, status: 'done' } : f
+        )
+      )
     } catch (err: any) {
-      console.error('❌ Upload error:', err.message)
-      setFiles((prev) =>
+      console.error('❌ Erreur upload + OCR :', err.message)
+      setFiles(prev =>
         prev.map((f, i) =>
           i === index ? { ...f, status: 'error', progress: 0 } : f
         )
@@ -56,25 +89,24 @@ export default function UploadScreen() {
     }
   }
 
-  // 🌐 Gestion du drag & drop (Web)
+  // 🌐 Gestion du drag & drop (web)
   const handleFilesDrop = async (droppedFiles: File[]) => {
-    const newFiles: FileStatus[] = droppedFiles.map((f) => ({
+    const newFiles: FileStatus[] = droppedFiles.map(f => ({
       name: f.name,
       uri: URL.createObjectURL(f),
       preview: f.type.startsWith('image/') ? URL.createObjectURL(f) : undefined,
       progress: 0,
       status: 'pending',
-      file: f, // ✅ on garde le vrai File ici
+      file: f,
     }))
 
-    setFiles((prev) => [...prev, ...newFiles])
-
+    setFiles(prev => [...prev, ...newFiles])
     newFiles.forEach(async (file, i) => {
       await uploadFile(file, files.length + i)
     })
   }
 
-  // 📱 Gestion du picker (Mobile)
+  // 📱 Gestion du picker mobile
   const handleManualPick = async () => {
     const result = await DocumentPicker.getDocumentAsync({
       type: ['application/pdf', 'image/*'],
@@ -83,22 +115,22 @@ export default function UploadScreen() {
 
     if (result.canceled) return
 
-    const pickedFiles: FileStatus[] = result.assets.map((f) => ({
+    const pickedFiles: FileStatus[] = result.assets.map(f => ({
       name: f.name,
       uri: f.uri,
       preview: f.mimeType?.startsWith('image/') ? f.uri : undefined,
       progress: 0,
       status: 'pending',
+      file: f as any,
     }))
 
-    setFiles((prev) => [...prev, ...pickedFiles])
-
+    setFiles(prev => [...prev, ...pickedFiles])
     pickedFiles.forEach(async (file, i) => {
       await uploadFile(file, files.length + i)
     })
   }
 
-  // 🎨 Rendu des fichiers
+  // 🎨 Rendu d’un fichier
   const renderFile = ({ item }: { item: FileStatus }) => (
     <View style={styles.fileCard}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -136,6 +168,12 @@ export default function UploadScreen() {
               ]}
             />
           </View>
+
+          {item.status === 'done' && (
+            <Text style={{ marginTop: 5, fontSize: 12, color: '#666' }}>
+              Texte OCR extrait et sauvegardé 🧠
+            </Text>
+          )}
         </View>
       </View>
     </View>
@@ -143,18 +181,18 @@ export default function UploadScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Button title="⬅️ Retour au dashboard" onPress={() => router.replace('/dashboard')} />
+      </View>
+
       <Text style={styles.title}>📁 Drop & Detect</Text>
 
-      {/* Zone de glisser-déposer */}
       <DropZone onFilesDrop={handleFilesDrop} />
-
-      {/* Sélection classique */}
       <Button title="📤 Sélectionner des fichiers" onPress={handleManualPick} />
 
-      {/* Liste fichiers */}
       <FlatList
         data={files}
-        keyExtractor={(item) => item.name + item.uri}
+        keyExtractor={item => item.name + item.uri}
         renderItem={renderFile}
         style={{ marginTop: 30, width: '100%' }}
       />
@@ -165,6 +203,13 @@ export default function UploadScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 50, backgroundColor: '#fff' },
   title: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
+  header: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    marginBottom: 10,
+  },
   fileCard: {
     marginBottom: 10,
     padding: 10,
