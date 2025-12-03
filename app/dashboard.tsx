@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   FlatList,
   Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Switch,
@@ -12,6 +13,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import Toast from 'react-native-toast-message'
+import { OCRSummary, summarizeOCR } from './lib/summarizeOCR'; // ✅ résumé OCR
 import { supabase } from './lib/supabase'
 
 interface DocumentItem {
@@ -20,6 +23,8 @@ interface DocumentItem {
   category: string
   file_url: string
   created_at: string
+  ocr_text?: string | null
+  ocr_summary?: OCRSummary | string | null
 }
 
 const CATEGORIES = ['Tous', 'Contrats', 'Devis', 'Factures', 'Autres']
@@ -33,6 +38,8 @@ export default function Dashboard() {
   const [activeCategory, setActiveCategory] = useState('Tous')
   const [searchQuery, setSearchQuery] = useState('')
   const [darkMode, setDarkMode] = useState(false)
+  const [modalVisible, setModalVisible] = useState(false)
+  const [docToDelete, setDocToDelete] = useState<DocumentItem | null>(null)
 
   const theme = darkMode ? darkTheme : lightTheme
 
@@ -104,24 +111,126 @@ export default function Dashboard() {
     }
   }
 
-  const renderDocument = ({ item }: { item: DocumentItem }) => (
-    <TouchableOpacity
-      style={[styles.docCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-      onPress={() => handleOpenDocument(item.file_url)}
-    >
-      <Text style={[styles.docTitle, { color: theme.text }]}>📄 {item.title}</Text>
-      <Text style={[styles.docCategory, { color: theme.textSecondary }]}>
-        Catégorie : {item.category}
-      </Text>
-      <Text style={[styles.docDate, { color: theme.muted }]}>
-        {new Date(item.created_at).toLocaleDateString('fr-FR')}
-      </Text>
-    </TouchableOpacity>
-  )
+  // 🗑️ Supprimer un document
+  const confirmDeleteDocument = (doc: DocumentItem) => {
+    setDocToDelete(doc)
+    setModalVisible(true)
+  }
+
+  const handleDeleteConfirmed = async () => {
+    if (!docToDelete) return
+
+    try {
+      const doc = docToDelete
+      setModalVisible(false)
+
+      // Supprimer du Storage
+      const path = decodeURIComponent(
+        new URL(doc.file_url).pathname.split('/').slice(-2).join('/')
+      )
+      const { error: storageError } = await supabase.storage
+        .from('documents')
+        .remove([path])
+      if (storageError)
+        console.warn('⚠️ Erreur suppression storage:', storageError.message)
+
+      // Supprimer de la table
+      const { error: dbError } = await supabase
+        .from('documents')
+        .delete()
+        .eq('id', doc.id)
+      if (dbError) throw dbError
+
+      // Mise à jour locale
+      setDocuments((prev) => prev.filter((d) => d.id !== doc.id))
+      setFilteredDocs((prev) => prev.filter((d) => d.id !== doc.id))
+
+      Toast.show({
+        type: 'success',
+        text1: 'Document supprimé ✅',
+        position: 'bottom',
+      })
+    } catch (err: any) {
+      console.error('❌ Erreur suppression document:', err.message)
+      Toast.show({
+        type: 'error',
+        text1: 'Erreur lors de la suppression ⚠️',
+      })
+    } finally {
+      setDocToDelete(null)
+    }
+  }
+
+  const renderDocument = ({ item }: { item: DocumentItem }) => {
+    const summary = item.ocr_text ? summarizeOCR(item.ocr_text) : null
+    const isValidSummary = summary && typeof summary !== 'string'
+
+    return (
+      <View
+        style={[
+          styles.docCard,
+          { backgroundColor: theme.card, borderColor: theme.border },
+        ]}
+      >
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <TouchableOpacity onPress={() => handleOpenDocument(item.file_url)}>
+            <Text style={[styles.docTitle, { color: theme.text }]}>
+              📄 {item.title}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => confirmDeleteDocument(item)}>
+            <Text style={{ color: '#ff4444', fontSize: 18 }}>🗑️</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[styles.docCategory, { color: theme.textSecondary }]}>
+          Catégorie : {item.category || 'Non classé'}
+        </Text>
+
+        <Text style={[styles.docDate, { color: theme.muted }]}>
+          {new Date(item.created_at).toLocaleDateString('fr-FR')}
+        </Text>
+
+        {isValidSummary && (
+          <View
+            style={{
+              marginTop: 8,
+              padding: 8,
+              backgroundColor:
+                theme.background === '#fff' ? '#f0f0f0' : '#2a2a2a',
+              borderRadius: 6,
+            }}
+          >
+            <Text style={{ color: theme.text, fontWeight: '600' }}>
+              🧠 Résumé OCR :
+            </Text>
+            <Text style={{ color: theme.textSecondary, marginTop: 4 }}>
+              Catégorie détectée : {summary.categorie}
+            </Text>
+            <Text style={{ color: theme.textSecondary }}>
+              Date détectée : {summary.date}
+            </Text>
+            <Text style={{ color: theme.textSecondary }}>
+              Montant détecté : {summary.montant}
+            </Text>
+            <Text style={{ color: theme.textSecondary, marginTop: 6 }}>
+              {summary.resume}
+            </Text>
+          </View>
+        )}
+      </View>
+    )
+  }
 
   return (
-    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}>
-      {/* 🌐 NAVBAR */}
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        { backgroundColor: theme.background },
+      ]}
+    >
+      {/* 🔝 Navbar */}
       <View style={[styles.navbar, { backgroundColor: theme.primary }]}>
         <TouchableOpacity onPress={() => router.push('/profile')}>
           <Text style={[styles.navLink, { color: theme.navText }]}>👤 Profil</Text>
@@ -146,9 +255,11 @@ export default function Dashboard() {
       <Text style={[styles.title, { color: theme.text }]}>
         Bienvenue sur ton tableau de bord
       </Text>
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{user?.email}</Text>
+      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+        {user?.email}
+      </Text>
 
-      {/* 📤 Import de document */}
+      {/* 📤 Import */}
       <TouchableOpacity
         style={[styles.uploadBtn, { backgroundColor: theme.button }]}
         onPress={() => router.push('/upload')}
@@ -158,9 +269,16 @@ export default function Dashboard() {
         </Text>
       </TouchableOpacity>
 
-      {/* 🔍 Barre de recherche */}
+      {/* 🔍 Recherche */}
       <TextInput
-        style={[styles.searchInput, { backgroundColor: theme.card, color: theme.text, borderColor: theme.border }]}
+        style={[
+          styles.searchInput,
+          {
+            backgroundColor: theme.card,
+            color: theme.text,
+            borderColor: theme.border,
+          },
+        ]}
         placeholder="🔍 Rechercher un document..."
         placeholderTextColor={theme.muted}
         value={searchQuery}
@@ -195,11 +313,13 @@ export default function Dashboard() {
         ))}
       </View>
 
-      {/* 📂 Liste des documents */}
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>Mes documents</Text>
-
+      {/* 📂 Liste */}
       {loading ? (
-        <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 20 }} />
+        <ActivityIndicator
+          size="large"
+          color={theme.primary}
+          style={{ marginTop: 20 }}
+        />
       ) : filteredDocs.length === 0 ? (
         <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
           Aucun document trouvé 📭
@@ -213,6 +333,38 @@ export default function Dashboard() {
           contentContainerStyle={{ alignItems: 'center', paddingBottom: 30 }}
         />
       )}
+
+      {/* 🔔 Modal Confirmation */}
+      <Modal visible={modalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              Supprimer ce document ?
+            </Text>
+            <Text style={{ color: theme.textSecondary, marginVertical: 10 }}>
+              Cette action est irréversible.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#ccc' }]}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text>Annuler</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#ff4444' }]}
+                onPress={handleDeleteConfirmed}
+              >
+                <Text style={{ color: '#fff' }}>Supprimer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Toast />
     </ScrollView>
   )
 }
@@ -244,11 +396,7 @@ const darkTheme = {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    paddingTop: 80,
-    alignItems: 'center',
-  },
+  container: { padding: 20, paddingTop: 80, alignItems: 'center' },
   navbar: {
     position: 'absolute',
     top: 0,
@@ -261,20 +409,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
     elevation: 5,
   },
-  navLink: {
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  navTitle: {
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginTop: 10,
-  },
+  navLink: { fontWeight: '600', fontSize: 16 },
+  navTitle: { fontWeight: 'bold', fontSize: 18 },
+  title: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginTop: 10 },
   subtitle: { textAlign: 'center', marginBottom: 25 },
   uploadBtn: {
     paddingVertical: 10,
@@ -307,12 +444,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
+  sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 10 },
   docCard: {
     padding: 14,
     borderRadius: 10,
@@ -323,9 +455,19 @@ const styles = StyleSheet.create({
   docTitle: { fontWeight: 'bold', fontSize: 16 },
   docCategory: { marginTop: 4 },
   docDate: { marginTop: 2, fontSize: 12 },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 20,
-    fontStyle: 'italic',
+  emptyText: { textAlign: 'center', marginTop: 20, fontStyle: 'italic' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
+  modalBox: { width: 300, borderRadius: 10, padding: 20 },
+  modalTitle: { fontWeight: 'bold', fontSize: 18, textAlign: 'center' },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 15,
+  },
+  modalBtn: { paddingVertical: 10, paddingHorizontal: 15, borderRadius: 8 },
 })
