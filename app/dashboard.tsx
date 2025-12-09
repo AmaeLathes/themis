@@ -14,8 +14,8 @@ import {
   View,
 } from 'react-native'
 import Toast from 'react-native-toast-message'
-import { OCRSummary, summarizeOCR } from './lib/summarizeOCR'; // ✅ résumé OCR
-import { supabase } from './lib/supabase'
+import { OCRSummary, summarizeOCR } from './_lib/summarizeOCR'
+import { supabase } from './_lib/supabase'
 
 interface DocumentItem {
   id: string
@@ -25,9 +25,22 @@ interface DocumentItem {
   created_at: string
   ocr_text?: string | null
   ocr_summary?: OCRSummary | string | null
+  resume_ai?: string | null
+  score?: number | null
+  analysis_json?: string | object | null
 }
 
-const CATEGORIES = ['Tous', 'Contrats', 'Devis', 'Factures', 'Autres']
+const CATEGORIES = [
+  'Tous',
+  'Assurance',
+  'Télécom & Internet',
+  'Énergie & Services',
+  'Banque & Finance',
+  'Location & Immobilier',
+  'Abonnements',
+  'Santé & Bien-etre',
+  'Autres',
+]
 
 export default function Dashboard() {
   const router = useRouter()
@@ -40,6 +53,10 @@ export default function Dashboard() {
   const [darkMode, setDarkMode] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
   const [docToDelete, setDocToDelete] = useState<DocumentItem | null>(null)
+
+  // 🧠 Modal Résumé IA
+  const [showAiModal, setShowAiModal] = useState(false)
+  const [selectedResumeAi, setSelectedResumeAi] = useState<string | null>(null)
 
   const theme = darkMode ? darkTheme : lightTheme
 
@@ -124,7 +141,6 @@ export default function Dashboard() {
       const doc = docToDelete
       setModalVisible(false)
 
-      // Supprimer du Storage
       const path = decodeURIComponent(
         new URL(doc.file_url).pathname.split('/').slice(-2).join('/')
       )
@@ -134,14 +150,12 @@ export default function Dashboard() {
       if (storageError)
         console.warn('⚠️ Erreur suppression storage:', storageError.message)
 
-      // Supprimer de la table
       const { error: dbError } = await supabase
         .from('documents')
         .delete()
         .eq('id', doc.id)
       if (dbError) throw dbError
 
-      // Mise à jour locale
       setDocuments((prev) => prev.filter((d) => d.id !== doc.id))
       setFilteredDocs((prev) => prev.filter((d) => d.id !== doc.id))
 
@@ -172,6 +186,7 @@ export default function Dashboard() {
           { backgroundColor: theme.card, borderColor: theme.border },
         ]}
       >
+        {/* HEADER DU CONTRAT */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <TouchableOpacity onPress={() => handleOpenDocument(item.file_url)}>
             <Text style={[styles.docTitle, { color: theme.text }]}>
@@ -184,14 +199,11 @@ export default function Dashboard() {
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.docCategory, { color: theme.textSecondary }]}>
-          Catégorie : {item.category || 'Non classé'}
-        </Text>
-
         <Text style={[styles.docDate, { color: theme.muted }]}>
           {new Date(item.created_at).toLocaleDateString('fr-FR')}
         </Text>
 
+        {/* 🧠 Résumé OCR */}
         {isValidSummary && (
           <View
             style={{
@@ -217,6 +229,60 @@ export default function Dashboard() {
             <Text style={{ color: theme.textSecondary, marginTop: 6 }}>
               {summary.resume}
             </Text>
+          </View>
+        )}
+
+        {/* 💼 Résumé IA */}
+        {item.resume_ai && (
+          <View
+            style={{
+              marginTop: 10,
+              padding: 10,
+              backgroundColor:
+                theme.background === '#fff' ? '#eef6ff' : '#1c2a3a',
+              borderRadius: 8,
+            }}
+          >
+            <Text style={{ color: theme.text, fontWeight: '600' }}>
+              💼 Analyse IA :
+            </Text>
+            <Text style={{ color: theme.textSecondary, marginTop: 4 }}>
+              {item.resume_ai}
+            </Text>
+
+            {item.score && (
+              <Text
+                style={{
+                  color:
+                    item.score >= 80
+                      ? '#2e7d32'
+                      : item.score >= 60
+                      ? '#f9a825'
+                      : '#d32f2f',
+                  marginTop: 4,
+                  fontWeight: '600',
+                }}
+              >
+                ⭐ Score de conformité : {item.score}/100
+              </Text>
+            )}
+
+            {/* 🔎 Bouton pour voir le résumé complet */}
+            <TouchableOpacity
+              style={{ marginTop: 8 }}
+              onPress={() => {
+                setSelectedResumeAi(
+                  item.analysis_json
+                    ? JSON.stringify(item.analysis_json)
+                    : item.resume_ai || null
+                )
+                setShowAiModal(true)
+              }}
+            >
+              <Text style={{ color: theme.primary, fontWeight: '600' }}>
+                🔎 Voir le résumé complet
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -315,11 +381,7 @@ export default function Dashboard() {
 
       {/* 📂 Liste */}
       {loading ? (
-        <ActivityIndicator
-          size="large"
-          color={theme.primary}
-          style={{ marginTop: 20 }}
-        />
+        <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 20 }} />
       ) : filteredDocs.length === 0 ? (
         <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
           Aucun document trouvé 📭
@@ -334,32 +396,126 @@ export default function Dashboard() {
         />
       )}
 
-      {/* 🔔 Modal Confirmation */}
-      <Modal visible={modalVisible} transparent animationType="fade">
+      {/* 🧠 Modal Résumé IA lisible */}
+      <Modal
+        visible={showAiModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAiModal(false)}
+      >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>
-              Supprimer ce document ?
-            </Text>
-            <Text style={{ color: theme.textSecondary, marginVertical: 10 }}>
-              Cette action est irréversible.
-            </Text>
+          <View style={[styles.aiModalBox, { backgroundColor: theme.card }]}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                💼 Résumé IA du Contrat
+              </Text>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#ccc' }]}
-                onPress={() => setModalVisible(false)}
+              <View
+                style={{
+                  backgroundColor: theme.primary,
+                  borderRadius: 8,
+                  padding: 8,
+                  marginVertical: 10,
+                }}
               >
-                <Text>Annuler</Text>
-              </TouchableOpacity>
+                <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '600' }}>
+                  🤖 Analyse générée par Themis IA
+                </Text>
+              </View>
 
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#ff4444' }]}
-                onPress={handleDeleteConfirmed}
-              >
-                <Text style={{ color: '#fff' }}>Supprimer</Text>
-              </TouchableOpacity>
-            </View>
+              {(() => {
+                try {
+                  const data =
+                    typeof selectedResumeAi === 'string'
+                      ? JSON.parse(selectedResumeAi)
+                      : selectedResumeAi
+
+                  if (data && typeof data === 'object') {
+                    return (
+                      <>
+                        {data.clauses && (
+                          <>
+                            <Text
+                              style={[styles.sectionTitle, { color: theme.text }]}
+                            >
+                              ⚖️ Clauses principales
+                            </Text>
+                            {data.clauses.map((c: string, i: number) => (
+                              <Text
+                                key={i}
+                                style={{ color: theme.textSecondary, marginBottom: 4 }}
+                              >
+                                • {c}
+                              </Text>
+                            ))}
+                          </>
+                        )}
+
+                        {data.risques && (
+                          <>
+                            <Text
+                              style={[styles.sectionTitle, { color: '#d32f2f' }]}
+                            >
+                              ⚠️ Risques détectés
+                            </Text>
+                            {data.risques.map((r: string, i: number) => (
+                              <Text
+                                key={i}
+                                style={{ color: theme.textSecondary, marginBottom: 4 }}
+                              >
+                                • {r}
+                              </Text>
+                            ))}
+                          </>
+                        )}
+
+                        {data.recommandations && (
+                          <>
+                            <Text
+                              style={[styles.sectionTitle, { color: '#2e7d32' }]}
+                            >
+                              💡 Recommandations
+                            </Text>
+                            {data.recommandations.map((r: string, i: number) => (
+                              <Text
+                                key={i}
+                                style={{ color: theme.textSecondary, marginBottom: 4 }}
+                              >
+                                • {r}
+                              </Text>
+                            ))}
+                          </>
+                        )}
+                      </>
+                    )
+                  } else {
+                    return (
+                      <Text style={{ color: theme.textSecondary }}>
+                        {selectedResumeAi}
+                      </Text>
+                    )
+                  }
+                } catch {
+                  return (
+                    <Text style={{ color: theme.textSecondary }}>
+                      {selectedResumeAi}
+                    </Text>
+                  )
+                }
+              })()}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[
+                styles.modalBtn,
+                { backgroundColor: theme.primary, marginTop: 10 },
+              ]}
+              onPress={() => setShowAiModal(false)}
+            >
+              <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '600' }}>
+                Fermer
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -444,7 +600,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
   },
-  sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 10 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', marginTop: 10, marginBottom: 4 },
   docCard: {
     padding: 14,
     borderRadius: 10,
@@ -453,7 +609,6 @@ const styles = StyleSheet.create({
     width: 300,
   },
   docTitle: { fontWeight: 'bold', fontSize: 16 },
-  docCategory: { marginTop: 4 },
   docDate: { marginTop: 2, fontSize: 12 },
   emptyText: { textAlign: 'center', marginTop: 20, fontStyle: 'italic' },
   modalOverlay: {
@@ -470,4 +625,15 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   modalBtn: { paddingVertical: 10, paddingHorizontal: 15, borderRadius: 8 },
+  aiModalBox: {
+    width: '90%',
+    maxHeight: '80%',
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
 })

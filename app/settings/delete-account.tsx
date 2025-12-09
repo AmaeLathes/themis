@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router'
 import React, { useState } from 'react'
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import * as Animatable from 'react-native-animatable'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../_lib/supabase'
 
 export default function DeleteAccount() {
   const router = useRouter()

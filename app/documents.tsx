@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native'
-import { supabase } from './lib/supabase'
+import { supabase } from './_lib/supabase'
 
 interface DocumentItem {
   id: string

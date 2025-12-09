@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router'
 import React, { useState } from 'react'
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../_lib/supabase'
 
 export default function ForgotPassword() {
   const router = useRouter()
