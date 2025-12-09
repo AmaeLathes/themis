@@ -335,6 +335,26 @@ export default function Dashboard() {
         </Text>
       </TouchableOpacity>
 
+      {/* 🤖 Assistant & Comparateur */}
+      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
+        {/* 💬 Assistant IA */}
+        <TouchableOpacity
+            style={[styles.navFeatureBtn, { backgroundColor: theme.primary }]}
+            onPress={() => router.push('/assistant')}
+          >
+          <Text style={[styles.navFeatureText, { color: '#fff' }]}>💬 Assistant IA</Text>
+        </TouchableOpacity>
+
+        {/* ⚖️ Comparateur */}
+        <TouchableOpacity
+          style={[styles.navFeatureBtn, { backgroundColor: theme.button }]}
+          onPress={() => router.push('/comparator')}
+        >
+          <Text style={[styles.navFeatureText, { color: theme.buttonText }]}>⚖️ Comparer</Text>
+        </TouchableOpacity>
+      </View>
+
+
       {/* 🔍 Recherche */}
       <TextInput
         style={[
@@ -636,4 +656,24 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
+
+  navFeatureBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    minWidth: 130,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+navFeatureText: {
+  fontWeight: 'bold',
+  fontSize: 15,
+},
+
 })
