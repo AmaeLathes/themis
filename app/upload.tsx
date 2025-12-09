@@ -3,9 +3,9 @@ import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { Button, FlatList, Image, StyleSheet, Text, View } from 'react-native'
 import DropZone from '../components/DropZone'
-import { extractTextFromFile } from './lib/ocrReader'; // ✅ OCR universel (PDF + image)
-import { supabase } from './lib/supabase'
-import { uploadDocument } from './lib/uploadDocument'
+import { extractTextFromFile } from './_lib/ocrReader'; // ✅ OCR universel (PDF + image)
+import { supabase } from './_lib/supabase'
+import { uploadDocument } from './_lib/uploadDocument'
 
 interface FileStatus {
   name: string

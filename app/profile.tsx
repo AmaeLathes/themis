@@ -1,18 +1,18 @@
 import * as ImagePicker from 'expo-image-picker'
 import React, { useEffect, useState } from 'react'
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native'
-import { supabase } from './lib/supabase'
+import { supabase } from './_lib/supabase'
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<any>(null)
