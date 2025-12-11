@@ -25,6 +25,7 @@
     "expo-splash-screen": "~31.0.10",
     "expo-status-bar": "~3.0.8",
     "expo-web-browser": "~15.0.9",
+    "moti": "^0.25.4",
     "pdf-parse": "^2.2.2",
     "pdfjs-dist": "^5.4.449",
     "react": "19.1.0",
